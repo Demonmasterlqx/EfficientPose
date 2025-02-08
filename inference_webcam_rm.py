@@ -45,7 +45,7 @@ def main():
 
     #input parameter
     phi = 0
-    path_to_weights = "./weights/phi_0_occlusion_best_ADD(-S).h5"
+    path_to_weights = "/home/lqx/docker_shared_file/EfficientPose/Weightsphi_0_occlusion_best_ADD(-S).h5"
     # save_path = "./predictions/occlusion/" #where to save the images or None if the images should be displayed and not saved
     save_path = None
     image_extension = ".jpg"

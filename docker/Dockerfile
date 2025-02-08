@@ -37,8 +37,7 @@ COPY Anaconda3-2024.10-1-Linux-x86_64.sh .
 
 RUN chmod 777 Anaconda3-2024.10-1-Linux-x86_64.sh \
     && printf "\nq\nyes\n\nyes\n" | ./Anaconda3-2024.10-1-Linux-x86_64.sh \
-    && rm Anaconda3-2024.10-1-Linux-x86_64.sh \
-    && cp .bashrc /etc/profile.d/conda.sh && chmod +x /etc/profile.d/conda.sh
+    && rm Anaconda3-2024.10-1-Linux-x86_64.sh 
 
 ENV PATH="/root/anaconda3/bin:$PATH"
 
