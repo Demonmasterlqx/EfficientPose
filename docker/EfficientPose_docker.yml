@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  efficientpose:
+    image: trydockerfile
+    command: /bin/bash
+    network_mode: host
+    volumes:
+      - /home/lqx/docker_shared_file/EfficientPose:/mnt
+    stdin_open: true   # 等同于 -i 选项，保持标准输入打开
+    tty: true          # 等同于 -t 选项，分配伪终端
