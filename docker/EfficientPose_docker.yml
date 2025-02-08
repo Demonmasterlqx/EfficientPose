@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   efficientpose:
-    image: trydockerfile
+    image: efficientpose
     command: /bin/bash
     network_mode: host
     volumes:

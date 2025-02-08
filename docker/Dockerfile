@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y tzdata && ln -sf /usr/share/zoneinfo/$T
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y nano \
     python3 python3-pip \
-    git
+    git lsof
 
 # 设置 Python3 为默认 Python 版本
 RUN ln -s /usr/bin/python3 /usr/bin/python
@@ -52,4 +52,5 @@ RUN source /root/anaconda3/etc/profile.d/conda.sh \
     && conda init && conda activate EfficientPose \
     && printf "y\n" | conda install tensorflow-gpu==1.15.0 \
     && pip install -r requirements.txt && python setup.py build_ext --inplace \
-    && apt-get install -y libglib2.0-0 libsm6 libxrender1
+    && apt-get install -y libglib2.0-0 libsm6 libxrender1\
+    && pip install python-multipart=0.0.8 uvicorn=0.22.0 fastapi=0.103.2

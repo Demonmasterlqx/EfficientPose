@@ -34,6 +34,12 @@ from model import build_EfficientPose
 from utils import preprocess_image
 from utils.visualization import draw_detections
 
+import io
+from fastapi import FastAPI, File, UploadFile, Response
+from fastapi.responses import JSONResponse
+import base64
+
+app = FastAPI()
 
 def main():
     """
@@ -45,9 +51,9 @@ def main():
 
     #input parameter
     phi = 0
-    path_to_weights = "/home/lqx/docker_shared_file/EfficientPose/Weightsphi_0_occlusion_best_ADD(-S).h5"
+    path_to_weights = "/mnt/Weights/Occlusion/phi_0_occlusion_best_ADD(-S).h5"
     # save_path = "./predictions/occlusion/" #where to save the images or None if the images should be displayed and not saved
-    save_path = None
+    save_path = "ims"
     image_extension = ".jpg"
     class_to_name = {0: "ape", 1: "can", 2: "cat", 3: "driller", 4: "duck", 5: "eggbox", 6: "glue", 7: "holepuncher"} #Occlusion
     #class_to_name = {0: "driller"} #Linemod use a single class with a name of the Linemod objects
@@ -65,7 +71,7 @@ def main():
     #build model and load weights
     model, image_size = build_model_and_load_weights(phi, num_classes, score_threshold, path_to_weights)
     
-    webcam = cv2.VideoCapture(0)
+    webcam = cv2.VideoCapture("/mnt/material.mp4")
     
     #inferencing
     print("\nStarting inference...\n")
@@ -100,9 +106,9 @@ def main():
                         draw_name = draw_name)
         
         #display image with predictions
-        cv2.imshow('image with predictions', original_image)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        # cv2.imshow('image with predictions', original_image)
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+        #     break
         
         if not save_path is None:
             #images to the given path
@@ -114,8 +120,111 @@ def main():
     #release webcam and close windows
     webcam.release()
     cv2.destroyAllWindows()
+
+def predictpose(content : bytes):
+
+    model, image_size, camera_matrix, translation_scale_norm, class_to_3d_bboxes, class_to_name, draw_bbox_2d, draw_name, score_threshold = app.state.model
     
+    nparr = np.frombuffer(content, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError("无法解码图片，请检查文件格式")
+
+    original_image = image.copy()
     
+    #preprocessing
+    input_list, scale = preprocess(image, image_size, camera_matrix, translation_scale_norm)
+    
+    #predict
+    boxes, scores, labels, rotations, translations = model.predict_on_batch(input_list)
+    
+    #postprocessing
+    boxes, scores, labels, rotations, translations = postprocess(boxes, scores, labels, rotations, translations, scale, score_threshold)
+    
+    draw_detections(original_image,
+                    boxes,
+                    scores,
+                    labels,
+                    rotations,
+                    translations,
+                    class_to_bbox_3D = class_to_3d_bboxes,
+                    camera_matrix = camera_matrix,
+                    label_to_name = class_to_name,
+                    draw_bbox_2d = draw_bbox_2d,
+                    draw_name = draw_name)
+    
+    os.makedirs('prossedimages', exist_ok = True)
+    cv2.imwrite(os.path.join('prossedimages', "image" + '.jpg'), original_image)
+    return original_image, boxes, scores, labels, rotations, translations
+
+@app.on_event("startup")
+def loadmodel():
+    """
+    Run EfficientPose in inference mode live on webcam.
+    
+    """
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    allow_gpu_growth_memory()
+
+    #input parameter
+    phi = 0
+    path_to_weights = "/mnt/Weights/Occlusion/phi_0_occlusion_best_ADD(-S).h5"
+    # save_path = "./predictions/occlusion/" #where to save the images or None if the images should be displayed and not saved
+    save_path = "ims"
+    image_extension = ".jpg"
+    class_to_name = {0: "ape", 1: "can", 2: "cat", 3: "driller", 4: "duck", 5: "eggbox", 6: "glue", 7: "holepuncher"} #Occlusion
+    #class_to_name = {0: "driller"} #Linemod use a single class with a name of the Linemod objects
+    score_threshold = 0.5
+    translation_scale_norm = 1000.0
+    draw_bbox_2d = False
+    draw_name = False
+    #you probably need to replace the linemod camera matrix with the one of your webcam
+    camera_matrix = get_linemod_camera_matrix()
+    name_to_3d_bboxes = get_linemod_3d_bboxes()
+    class_to_3d_bboxes = {class_idx: name_to_3d_bboxes[name] for class_idx, name in class_to_name.items()} 
+    
+    num_classes = len(class_to_name)
+    
+    #build model and load weights
+    model, image_size = build_model_and_load_weights(phi, num_classes, score_threshold, path_to_weights)
+    app.state.model=(model, image_size, camera_matrix, translation_scale_norm, class_to_3d_bboxes, class_to_name, draw_bbox_2d, draw_name, score_threshold)
+
+@app.post("/process")
+async def process_endpoint(file: UploadFile = File(...)):
+    try:
+        # 读取上传文件
+        contents = await file.read()
+        processed_image, boxes, scores, labels, rotations, translations = predictpose(contents)
+        
+        with open(os.path.join('prossedimages', "image" + '.jpg'), "rb") as image_file:
+            image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
+        
+        print(len(image_base64))
+        if hasattr(boxes, "tolist"):
+            boxes = boxes.tolist()
+        if hasattr(scores, "tolist"):
+            scores = scores.tolist()
+        if hasattr(labels, "tolist"):
+            labels = labels.tolist()
+        if hasattr(rotations, "tolist"):
+            rotations = rotations.tolist()
+        if hasattr(translations, "tolist"):
+            translations = translations.tolist()
+        response_data={
+            "image_base64" : image_base64,
+            "boxes" : boxes,
+            "scores" : scores,
+            "labels" : labels,
+            "rotations" : rotations,
+            "translations" : translations,
+        }
+        return JSONResponse(content=response_data)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
 def allow_gpu_growth_memory():
     """
         Set allow growth GPU memory to true
@@ -314,4 +423,5 @@ def postprocess(boxes, scores, labels, rotations, translations, scale, score_thr
 
 
 if __name__ == '__main__':
-    main()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8081)
